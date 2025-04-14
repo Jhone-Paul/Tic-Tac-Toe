@@ -1,5 +1,7 @@
+#include <cmath>
 #include <iostream>
 #include <string>
+#include <vector>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
@@ -104,6 +106,144 @@ void processInput(GLFWwindow *window)
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 }
+
+int gameBoard[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+bool xTurn = true;
+
+void handleCellClick(float x, float y)
+{
+    int row = -1, col = -1;
+
+    // Determine column (x coordinate)
+    if (x < -0.33f)
+        col = 0;
+    else if (x < 0.33f)
+        col = 1;
+    else if (x <= 0.8f)
+        col = 2;
+
+    // Determine row (y coordinate)
+    if (y < -0.33f)
+        row = 2;
+    else if (y < 0.33f)
+        row = 1;
+    else if (y <= 0.8f)
+        row = 0;
+
+    if (row >= 0 && row < 3 && col >= 0 && col < 3 && gameBoard[row][col] == 0)
+    {
+        // Place X or O based on whose turn it is
+        gameBoard[row][col] = xTurn ? 1 : 2;
+        xTurn = !xTurn;
+        printBoard(gameBoard);
+        // Check for win condition
+        if (threeRow(gameBoard))
+        {
+            std::cout << "Game over! " << (xTurn ? "O" : "X") << " wins!" << std::endl;
+        }
+    }
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    {
+        double xpos, ypos;
+        glfwGetCursorPos(window, &xpos, &ypos);
+        int width, height;
+        glfwGetWindowSize(window, &width, &height);
+        float x = (2.0f * xpos) / width - 1.0f;
+        float y = 1.0f - (2.0f * ypos) / height;
+
+        std::cout << x << " " << y << std::endl;
+        handleCellClick(x, y);
+    }
+}
+void drawO(int row, int col) {
+    // Calculate the center of the cell
+    float centerX = -0.56f + col * 0.56f;
+    float centerY = 0.56f - row * 0.56f;
+    float radius = 0.2f;
+    int segments = 20;
+
+    std::vector<float> circleVertices;
+
+    for (int i = 0; i <= segments; i++) {
+        float angle = 2.0f * M_PI * i / segments;
+        float x = centerX + radius * cosf(angle);
+        float y = centerY + radius * sinf(angle);
+
+        circleVertices.push_back(x);
+        circleVertices.push_back(y);
+        circleVertices.push_back(0.0f);
+    }
+
+    unsigned int oVBO, oVAO;
+    glGenVertexArrays(1, &oVAO);
+    glGenBuffers(1, &oVBO);
+
+    glBindVertexArray(oVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, oVBO);
+    glBufferData(GL_ARRAY_BUFFER, circleVertices.size() * sizeof(float), circleVertices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glDrawArrays(GL_LINE_LOOP, 0, segments + 1);
+
+    glDeleteVertexArrays(1, &oVAO);
+    glDeleteBuffers(1, &oVBO);
+}
+void drawX(int row, int col) {
+    // Calculate the center of the cell
+    float centerX = -0.56f + col * 0.56f;
+    float centerY = 0.56f - row * 0.56f;
+    float size = 0.2f;
+
+    float xVertices[] = {
+        centerX - size, centerY - size, 0.0f,
+        centerX + size, centerY + size, 0.0f,
+
+        centerX - size, centerY + size, 0.0f,
+        centerX + size, centerY - size, 0.0f
+    };
+
+    unsigned int xVBO, xVAO;
+    glGenVertexArrays(1, &xVAO);
+    glGenBuffers(1, &xVBO);
+
+    glBindVertexArray(xVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, xVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(xVertices), xVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glDrawArrays(GL_LINES, 0, 2); // First diagonal
+    glDrawArrays(GL_LINES, 2, 2); // Second diagonal
+
+    glDeleteVertexArrays(1, &xVAO);
+    glDeleteBuffers(1, &xVBO);
+}
+void drawTicTacToe(int board[3][3], unsigned int VAO, unsigned int shaderProgram ) {
+    // First draw the grid lines
+    glUseProgram(shaderProgram);
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_LINES, 0, 2);
+    glDrawArrays(GL_LINES, 2, 2);
+    glDrawArrays(GL_LINES, 4, 2);
+    glDrawArrays(GL_LINES, 6, 2);
+
+    for (int row = 0; row < 3; row++) {
+        for (int col = 0; col < 3; col++) {
+            if (board[row][col] == 1) {
+                drawX(row, col);
+            } else if (board[row][col] == 2) {
+                drawO(row, col);
+            }
+        }
+    }
+}
 int main() {
 
     std::string move;
@@ -114,22 +254,21 @@ int main() {
     if (gui) {
 
         float vertices[] = {
-            // Vertical line 1 (left)
-            -0.33f, -0.8f, 0.0f,  // Start point
-            -0.33f,  0.8f, 0.0f,  // End point
+            -0.33f, -0.8f, 0.0f,
+            -0.33f,  0.8f, 0.0f,
 
-            // Vertical line 2 (right)
-            0.33f, -0.8f, 0.0f,   // Start point
-            0.33f,  0.8f, 0.0f,   // End point
+            0.33f, -0.8f, 0.0f,
+            0.33f,  0.8f, 0.0f,
 
-            // Horizontal line 1 (top)
-            -0.8f,  0.33f, 0.0f,  // Start point
-             0.8f,  0.33f, 0.0f,  // End point
+            -0.8f,  0.33f, 0.0f,
+             0.8f,  0.33f, 0.0f,
 
-            // Horizontal line 2 (bottom)
-            -0.8f, -0.33f, 0.0f,  // Start point
-             0.8f, -0.33f, 0.0f   // End point
+            -0.8f, -0.33f, 0.0f,
+             0.8f, -0.33f, 0.0f
         };
+
+
+
         glfwInit();
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -205,6 +344,9 @@ int main() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
 
+        glfwSetMouseButtonCallback(window, mouse_button_callback);
+
+
         while(!glfwWindowShouldClose(window))
         {
             processInput(window);
@@ -213,12 +355,7 @@ int main() {
             glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
 
-            glUseProgram(shaderProgram);
-            glBindVertexArray(VAO);
-            glDrawArrays(GL_LINES, 0, 2);
-            glDrawArrays(GL_LINES, 2, 2);
-            glDrawArrays(GL_LINES, 4, 2);
-            glDrawArrays(GL_LINES, 6, 2);
+            drawTicTacToe(gameBoard, VAO, shaderProgram);
 
             glfwSwapBuffers(window);
             glfwPollEvents();
